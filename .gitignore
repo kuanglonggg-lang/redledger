@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite databases & runtime data
+*.db
+*.sqlite
+*.sqlite3
+data/
+*.db-wal
+*.db-shm
+
+# Log files
+*.log
+logs/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment and IDE
+.env
+.venv
+env/
+venv/
+.vscode/
+.idea/
+
+# Local WeChat snapshot data
+local-db-snapshots/
+reports/
+report_output/
+*.png
+*.jpg
+*.jpeg

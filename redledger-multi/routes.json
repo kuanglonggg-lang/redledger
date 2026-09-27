@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "comment": "RedLedger Multi-Group Ingress Router Configuration",
+  "ingress_port": 8766,
+  "wechat_hook_url": "http://127.0.0.1:8765",
+  "groups": {
+    "59220588167@chatroom": {
+      "name": "奥数练习班",
+      "port": 8771,
+      "db": "E:\\RedLedger\\data\\redledger.sqlite3",
+      "enabled": true
+    }
+  },
+  "default_group": "59220588167@chatroom"
+}
