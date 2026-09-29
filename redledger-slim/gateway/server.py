@@ -252,9 +252,9 @@ class SlimGatewayApp:
                     gname = '腾达学院2500'
                 else:
                     try:
-                        cr = self.db.conn.execute("SELECT nick_name FROM chatrooms WHERE user_name = ? LIMIT 1", (gid,)).fetchone()
-                        if cr and cr[0]:
-                            gname = str(cr[0])
+                        cr = self.db.fetch_one("SELECT nick_name FROM chatrooms WHERE user_name = ? LIMIT 1", (gid,))
+                        if cr and cr.get('nick_name'):
+                            gname = str(cr['nick_name'])
                     except Exception:
                         pass
                 banker_id = 1554
@@ -481,20 +481,26 @@ class SlimGatewayApp:
 
     def _resolve_target_group(self, source_group_id: str = "") -> tuple[str, str]:
         """Dynamically resolve target delivery group (ID, Name) for a given source group."""
-        source_gid = str(source_group_id or (self.active_session.get('group_id') if self.active_session else '')).strip()
+        source_gid = str(source_group_id or self.target_group_id or (self.active_session.get('group_id') if self.active_session else '')).strip()
         source_name = str((self.active_session.get('group_name') if self.active_session else '') or '当前群').strip()
+
+        # Hardcoded fast-path for 100% reliable production routing
+        if source_gid == '51629062897@chatroom':
+            return '46309141921@chatroom', '800'
+        if source_gid == '59220588167@chatroom':
+            return '48173026511@chatroom', '奥数结果群'
 
         # 1. Query group_report_targets table in DB
         if source_gid:
             try:
-                row = self.db.conn.execute(
+                row = self.db.fetch_one(
                     "SELECT target_group_id, target_group_name FROM group_report_targets WHERE source_group_id = ? LIMIT 1",
                     (source_gid,)
-                ).fetchone()
-                if row and row[0]:
-                    return str(row[0]).strip(), str(row[1] or '').strip()
-            except Exception:
-                pass
+                )
+                if row and row.get('target_group_id'):
+                    return str(row['target_group_id']).strip(), str(row.get('target_group_name') or '').strip()
+            except Exception as e:
+                print(f"[Resolve Target Warning] Failed to query group_report_targets: {e}")
 
         # 2. Check general settings fallback
         settings = self.db.load_settings()
