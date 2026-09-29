@@ -5,10 +5,14 @@ RedLedger Cluster Supervisor.
 Starts the Ingress Router and all configured Group Workers.
 Monitors process health and provides unified lifecycle management.
 """
-from __future__ import annotations
+import sys
+sys.path.insert(0, r"E:\RedLedger\server\RedLedgerServer\_internal\base_library.zip")
+sys.path.insert(0, r"E:\RedLedger\runtime\Lib")
+sys.path.insert(0, r"E:\RedLedger\runtime\site-packages")
+sys.path.insert(0, r"E:\RedLedger\server\RedLedgerServer\_internal")
+sys.path.insert(0, r"E:\RedLedger\redledger-slim")
 
 import os
-import sys
 import json
 import time
 import signal
@@ -98,8 +102,14 @@ class ClusterSupervisor:
                 for tag, proc in list(self.processes.items()):
                     ret = proc.poll()
                     if ret is not None:
-                        print(f"[Cluster Warning] Process {tag} exited with code {ret}!")
-                        # Auto restart can be added here
+                        print(f"[Cluster Warning] Process {tag} exited with code {ret}! Auto-restarting in 2s...")
+                        time.sleep(2.0)
+                        if tag == "router":
+                            self.start_router(ingress_port)
+                        elif tag.startswith("worker_"):
+                            gid = tag.replace("worker_", "")
+                            if gid in groups and groups[gid].get("enabled", True):
+                                self.start_worker(gid, groups[gid])
         except KeyboardInterrupt:
             self.stop_all()
 

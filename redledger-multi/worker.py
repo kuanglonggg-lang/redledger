@@ -71,7 +71,7 @@ def main():
     logger.info(f"  Reports Dir:    {args.report_dir}")
     logger.info("=" * 60)
 
-    gateway = SlimGatewayApp(db_path=db_path, report_dir=args.report_dir)
+    gateway = SlimGatewayApp(db_path=db_path, report_dir=args.report_dir, target_group_id=group_id)
     if group_id:
         gateway.local_bridge.monitored_groups = {group_id}
         

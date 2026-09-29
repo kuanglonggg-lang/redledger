@@ -67,14 +67,17 @@ def start_web_server():
 
 def kill_existing_server():
     try:
-        cmd = 'powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like \'*redledger-slim*main.py*\' -or $_.CommandLine -like \'*gateway.server*\' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+        cmd = 'powershell -Command "Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like \'*cluster_manager.py*\' -or $_.CommandLine -like \'*worker.py*\' -or $_.CommandLine -like \'*router.py*\' -or $_.CommandLine -like \'*redledger-slim*main.py*\') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
         subprocess.run(cmd, shell=True, capture_output=True)
     except Exception as e:
         log(f"Kill server error: {e}")
 
 def start_server():
-    log("[WATCHDOG] Starting RedLedger Slim Server...")
-    cmd = f'powershell -WindowStyle Hidden -Command "Start-Process \'{PYTHON_EXE}\' -ArgumentList \'{SLIM_DIR}\\main.py\' -RedirectStandardOutput \'{SERVER_LOG}\' -RedirectStandardError \'{SERVER_LOG}\' -NoNewWindow"'
+    log("[WATCHDOG] Starting RedLedger Multi-Group Cluster...")
+    cluster_script = r"E:\RedLedger\redledger-multi\cluster_manager.py"
+    out_log = r"E:\RedLedger\logs\cluster_manager.out.log"
+    err_log = r"E:\RedLedger\logs\cluster_manager.err.log"
+    cmd = f'powershell -WindowStyle Hidden -Command "Start-Process \'{PYTHON_EXE}\' -ArgumentList \'{cluster_script}\' -RedirectStandardOutput \'{out_log}\' -RedirectStandardError \'{err_log}\' -NoNewWindow"'
     subprocess.Popen(cmd, shell=True)
     time.sleep(3)
 

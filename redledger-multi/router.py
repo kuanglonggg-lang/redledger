@@ -80,19 +80,33 @@ class RouteManager:
 route_mgr = RouteManager(CONFIG_PATH)
 
 def extract_group_id(payload: dict[str, Any]) -> str:
-    gid = payload.get("from_group") or payload.get("group_id")
+    gid = payload.get("from_group") or payload.get("group_id") or payload.get("roomid") or payload.get("room_id")
     if gid:
         return str(gid).strip()
     data = payload.get("data")
     if isinstance(data, dict):
-        gid = data.get("from_group") or data.get("group_id")
+        gid = data.get("from_group") or data.get("group_id") or data.get("roomid") or data.get("room_id")
         if gid:
             return str(gid).strip()
+        from_user = data.get("from_user") or data.get("fromUser") or data.get("fromUserName")
+        if from_user and str(from_user).endswith("@chatroom"):
+            return str(from_user).strip()
     msg = payload.get("msg") or payload.get("message")
     if isinstance(msg, dict):
-        gid = msg.get("from_group") or msg.get("group_id")
+        gid = msg.get("from_group") or msg.get("group_id") or msg.get("roomid") or msg.get("room_id")
         if gid:
             return str(gid).strip()
+    from_user = payload.get("fromUser") or payload.get("fromUserName") or payload.get("from_user")
+    if from_user and str(from_user).endswith("@chatroom"):
+        return str(from_user).strip()
+    try:
+        from gateway.vxhook import normalize_vxhook_payload
+        norm = normalize_vxhook_payload(payload)
+        gid = norm.get("group_id") or norm.get("from_group") or ""
+        if gid:
+            return str(gid).strip()
+    except Exception:
+        pass
     return ""
 
 def forward_to_worker(port: int, raw_body: bytes, path: str = "/api/recvMsg") -> tuple[int, bytes]:
@@ -125,6 +139,30 @@ def recv_msg():
     target_port = route_mgr.get_target_port(group_id)
     status_code, body = forward_to_worker(target_port, raw_data, path="/api/recvMsg")
     return body, status_code, {"Content-Type": "application/json"}
+
+@app.route("/api/<path:subpath>", methods=["POST", "GET"])
+def proxy_endpoint(subpath: str):
+    if subpath in {"status", "reload_routes"}:
+        return None  # handled by native routes below
+    raw_data = request.get_data()
+    group_id = ""
+    try:
+        payload = json.loads(raw_data.decode("utf-8", errors="replace"))
+        group_id = extract_group_id(payload) or str(payload.get("target_group_id") or payload.get("group_id") or "")
+    except Exception:
+        pass
+    target_port = route_mgr.get_target_port(group_id)
+    if request.method == "POST":
+        status_code, body = forward_to_worker(target_port, raw_data, path=f"/api/{subpath}")
+        return body, status_code, {"Content-Type": "application/json"}
+    else:
+        url = f"http://127.0.0.1:{target_port}/api/{subpath}"
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                return resp.read(), resp.status, {"Content-Type": "application/json"}
+        except Exception as e:
+            return jsonify({"status": "error", "error": str(e)}), 502
 
 @app.route("/api/status", methods=["GET"])
 def cluster_status():

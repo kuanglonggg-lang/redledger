@@ -9,7 +9,13 @@
       "port": 8771,
       "db": "E:\\RedLedger\\data\\redledger.sqlite3",
       "enabled": true
+    },
+    "51629062897@chatroom": {
+      "name": "腾达学院2500",
+      "port": 8772,
+      "db": "E:\\RedLedger\\data\\redledger.sqlite3",
+      "enabled": true
     }
   },
-  "default_group": "59220588167@chatroom"
+  "default_group": "51629062897@chatroom"
 }

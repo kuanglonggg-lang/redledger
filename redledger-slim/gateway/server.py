@@ -133,7 +133,8 @@ CLASS_END_KEYWORDS = {"下课", "下课了", "结束", "全场结束"}
 
 
 class SlimGatewayApp:
-    def __init__(self, db_path: str, report_dir: str = 'C:/Temp/redledger-reports'):
+    def __init__(self, db_path: str, report_dir: str = 'C:/Temp/redledger-reports', target_group_id: str | None = None):
+        self.target_group_id = str(target_group_id).strip() if target_group_id else None
         self.db_path = db_path
         self.db = Database(db_path)
         self.settings = self.db.load_settings()
@@ -237,12 +238,15 @@ class SlimGatewayApp:
         """Ensure an active open session exists in memory and DB."""
         if not self.active_session or self.active_session.get('status') == 'closed':
             # Check latest open session in DB
-            sess_row = self.db.fetch_one("SELECT * FROM sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1")
+            if self.target_group_id:
+                sess_row = self.db.fetch_one("SELECT * FROM sessions WHERE status = 'open' AND group_id = ? ORDER BY id DESC LIMIT 1", (self.target_group_id,))
+            else:
+                sess_row = self.db.fetch_one("SELECT * FROM sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1")
             if sess_row:
                 self.active_session = dict(sess_row)
                 self.historical_pnl = self.db.recover_historical_pnl(sess_row['id'])
             elif allow_create:
-                gid = group_id or '59220588167@chatroom'
+                gid = self.target_group_id or group_id or '59220588167@chatroom'
                 gname = '奥数练习班'
                 if gid == '51629062897@chatroom':
                     gname = '腾达学院2500'
@@ -318,7 +322,10 @@ class SlimGatewayApp:
 
     def _load_active_session_from_db(self):
         with self.state_lock:
-            sess_row = self.db.fetch_one("SELECT * FROM sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1")
+            if self.target_group_id:
+                sess_row = self.db.fetch_one("SELECT * FROM sessions WHERE status = 'open' AND group_id = ? ORDER BY id DESC LIMIT 1", (self.target_group_id,))
+            else:
+                sess_row = self.db.fetch_one("SELECT * FROM sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1")
             if sess_row:
                 self.active_session = dict(sess_row)
                 if hasattr(self, 'local_bridge') and self.active_session.get('group_id'):
@@ -783,7 +790,7 @@ class SlimGatewayApp:
                 return {'status': 'ignored', 'reason': 'no_active_session'}
 
             # Reject other groups
-            active_gid = str(self.active_session.get('group_id') or '').strip()
+            active_gid = self.target_group_id or str(self.active_session.get('group_id') or '').strip()
             if msg_group and active_gid and msg_group != active_gid:
                 return {'status': 'ignored', 'reason': 'group_mismatch'}
 
