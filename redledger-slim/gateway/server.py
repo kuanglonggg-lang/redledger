@@ -166,6 +166,7 @@ class SlimGatewayApp:
             poll_interval=0.1
         )
         self.local_bridge.add_monitored_group('59220588167@chatroom')
+        self.local_bridge.add_monitored_group('51629062897@chatroom')
 
         self._load_active_session_from_db()
 
@@ -243,10 +244,20 @@ class SlimGatewayApp:
             elif allow_create:
                 gid = group_id or '59220588167@chatroom'
                 gname = '奥数练习班'
+                if gid == '51629062897@chatroom':
+                    gname = '腾达学院2500'
+                else:
+                    try:
+                        cr = self.db.conn.execute("SELECT nick_name FROM chatrooms WHERE user_name = ? LIMIT 1", (gid,)).fetchone()
+                        if cr and cr[0]:
+                            gname = str(cr[0])
+                    except Exception:
+                        pass
                 banker_id = 1554
+                notes = f'{gname}自动会话'
                 cur = self.db.execute(
-                    "INSERT INTO sessions (title, group_name, group_id, banker_member_id, status, trend, started_at, notes) VALUES ('wechat redpacket ledger', ?, ?, ?, 'open', '', ?, '奥数练习班自动会话')",
-                    (gname, gid, banker_id, now_iso())
+                    "INSERT INTO sessions (title, group_name, group_id, banker_member_id, status, trend, started_at, notes) VALUES ('wechat redpacket ledger', ?, ?, ?, 'open', '', ?, ?)",
+                    (gname, gid, banker_id, now_iso(), notes)
                 )
                 new_id = cur.lastrowid
                 self.db.commit()
@@ -260,7 +271,7 @@ class SlimGatewayApp:
                     'trend': '',
                     'class_end_count': 0,
                     'started_at': now_iso(),
-                    'notes': '奥数练习班自动会话'
+                    'notes': notes
                 }
                 self.historical_pnl = {}
                 self.active_round = None
@@ -461,6 +472,30 @@ class SlimGatewayApp:
                     return jsonify({'status': 'ok', 'closed_session_id': sess_id})
                 return jsonify({'status': 'ok', 'message': 'no_active_session'})
 
+    def _resolve_target_group(self, source_group_id: str = "") -> tuple[str, str]:
+        """Dynamically resolve target delivery group (ID, Name) for a given source group."""
+        source_gid = str(source_group_id or (self.active_session.get('group_id') if self.active_session else '')).strip()
+        source_name = str((self.active_session.get('group_name') if self.active_session else '') or '当前群').strip()
+
+        # 1. Query group_report_targets table in DB
+        if source_gid:
+            try:
+                row = self.db.conn.execute(
+                    "SELECT target_group_id, target_group_name FROM group_report_targets WHERE source_group_id = ? LIMIT 1",
+                    (source_gid,)
+                ).fetchone()
+                if row and row[0]:
+                    return str(row[0]).strip(), str(row[1] or '').strip()
+            except Exception:
+                pass
+
+        # 2. Check general settings fallback
+        settings = self.db.load_settings()
+        if settings.get('report_target_group_id'):
+            return str(settings.get('report_target_group_id')).strip(), str(settings.get('report_target_group_name') or source_name).strip()
+
+        return source_gid, source_name
+
     def _execute_settlement(self, result_val: str) -> dict[str, Any]:
         if not self.active_session:
             return {'status': 'error', 'reason': 'no_active_session'}
@@ -484,8 +519,10 @@ class SlimGatewayApp:
             self.historical_pnl[s.member_id] = s.cumulative_output
 
         self.settings = self.db.load_settings()
-        target_group_name = self.settings.get('report_target_group_name') or self.active_session.get('group_name') or '奥数练习班'
-        target_group_id = self.settings.get('report_target_group_id') or self.active_session.get('group_id') or '59220588167@chatroom'
+        source_gid = self.active_session.get('group_id', '') if self.active_session else ''
+        target_group_id, target_group_name = self._resolve_target_group(source_gid)
+        if not target_group_name:
+            target_group_name = self.active_session.get('group_name', '当前群') if self.active_session else '当前群'
         
         next_round_no = self.active_round.round_no + 1
         next_disp_no = (self.active_round.display_round_no or 0) + 1
@@ -640,8 +677,10 @@ class SlimGatewayApp:
         zero = sorted([r for r in rows if r['amount'] == 0], key=lambda r: r['member']['display_name'])
         
         # 3. Render session summary report
-        target_group_name = self.settings.get('report_target_group_name') or session_meta.get('group_name') or '奥数结果群'
-        target_group_id = self.settings.get('report_target_group_id') or '48173026511@chatroom'
+        source_gid = session_meta.get('group_id', '')
+        target_group_id, target_group_name = self._resolve_target_group(source_gid)
+        if not target_group_name:
+            target_group_name = session_meta.get('group_name', '奥数结果群')
         
         try:
             summary_img = str(self.renderer.render_session_summary(

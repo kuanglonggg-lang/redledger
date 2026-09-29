@@ -50,6 +50,21 @@ def check_vxhook_status() -> bool:
     except Exception:
         return False
 
+def check_web_status() -> bool:
+    try:
+        req = urllib.request.urlopen("http://127.0.0.1:8768", timeout=3)
+        return req.status == 200
+    except Exception:
+        return False
+
+def start_web_server():
+    log("[WATCHDOG] Starting Web UI Server (port 8768)...")
+    web_script = r"E:\RedLedger\run_web_server.py"
+    out_log = r"E:\RedLedger\logs\web_server.out.log"
+    err_log = r"E:\RedLedger\logs\web_server.err.log"
+    cmd = f'powershell -WindowStyle Hidden -Command "Start-Process \'{PYTHON_EXE}\' -ArgumentList \'{web_script}\' -RedirectStandardOutput \'{out_log}\' -RedirectStandardError \'{err_log}\' -NoNewWindow"'
+    subprocess.Popen(cmd, shell=True)
+
 def kill_existing_server():
     try:
         cmd = 'powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like \'*redledger-slim*main.py*\' -or $_.CommandLine -like \'*gateway.server*\' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
@@ -83,10 +98,15 @@ def run_watchdog_loop():
         else:
             consecutive_failures = 0
             
+            # Check Web UI health on 8768
+            if not check_web_status():
+                log("[ACTION] Web UI Dashboard on port 8768 unresponsive, starting...")
+                start_web_server()
+
             # Check bridge health
             bridge = status.get('local_db_bridge', {})
-            if not bridge.get('is_alive', False):
-                log(f"[WARN] Local DB bridge reported not alive! {bridge}")
+            if bridge.get('consecutive_errors', 0) > 5:
+                log(f"[WARN] Local DB bridge reported errors! {bridge}")
             
             # Check round progression
             round_info = status.get('active_round')
