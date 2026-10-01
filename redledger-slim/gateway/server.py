@@ -582,7 +582,62 @@ class SlimGatewayApp:
         if auto_send:
             try:
                 t1 = time.perf_counter()
-                img_path = str(self.renderer.render(self.active_session, settled_round, summaries))
+
+                # Build inactive members list (players who participated in this session but didn't bet in this round)
+                active_member_ids = {s.member_id for s in summaries}
+                banker_id = int(self.active_session.get('banker_member_id') or settled_round.banker_id or 1554)
+                
+                # Fetch all members who placed accepted bets in this session
+                session_bettor_rows = self.db.fetch_all(
+                    "SELECT DISTINCT member_id FROM bets WHERE session_id = ? AND status = 'accepted'",
+                    (self.active_session['id'],)
+                )
+                session_bettor_ids = {r['member_id'] for r in session_bettor_rows}
+                all_participant_ids = set(self.historical_pnl.keys()).union(session_bettor_ids)
+                
+                inactive_ids = sorted(all_participant_ids - active_member_ids - {banker_id})
+                inactive_members = []
+                for idx, m_id in enumerate(inactive_ids, 1):
+                    member = self.members_map.get(m_id)
+                    if not member:
+                        m_row = self.db.fetch_one("SELECT * FROM members WHERE id = ?", (m_id,))
+                        if m_row:
+                            member = Member(
+                                id=m_row['id'],
+                                wxid=m_row.get('wxid', ''),
+                                display_name=m_row.get('display_name') or m_row.get('name') or f"玩家_{m_id}",
+                                avatar_url=m_row.get('avatar_url', ''),
+                                is_banker=bool(m_row.get('is_banker', 0))
+                            )
+                            self.members_map[m_id] = member
+
+                    disp_name = member.display_name if member else f"玩家_{m_id}"
+                    avatar = member.avatar_url if member else ""
+                    cum_pnl = self.historical_pnl.get(m_id, 0)
+                    
+                    inactive_members.append({
+                        "index": idx,
+                        "member": {
+                            "id": m_id,
+                            "display_name": disp_name,
+                            "wxid": member.wxid if member else "",
+                            "avatar_url": avatar,
+                            "is_banker": 0
+                        },
+                        "is_banker": False,
+                        "is_settled": True,
+                        "round_output": 0,
+                        "cumulative_output": cum_pnl,
+                        "log": "未参加本轮",
+                        "log_items": []
+                    })
+
+                img_path = str(self.renderer.render(
+                    self.active_session, 
+                    settled_round, 
+                    summaries, 
+                    inactive_members=inactive_members
+                ))
                 t_render = (time.perf_counter() - t1) * 1000
 
                 # Update artifact_path in report_jobs

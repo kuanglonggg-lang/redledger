@@ -180,7 +180,12 @@ def _draw_header(draw: ImageDraw.ImageDraw, state: dict[str, Any], fonts: dict[s
     title = _clean_text(f"第{batch_no}批次号{batch_code}")
     group = _clean_text(str(session.get("group_name") or "微信群"))
     generated = str(board.get("generated_at") or "")
-    subtitle = _clean_text(f"本轮参与看板：产出、累计与输出日志一屏可见。- [{generated.replace('T', ' ')}]")
+    current = state.get("current") or {}
+    inactive_rows = list(current.get("inactive_rows") or [])
+    if inactive_rows:
+        subtitle = _clean_text(f"双区看板：行为产出与静默状态一屏可见。- [{generated.replace('T', ' ')}]")
+    else:
+        subtitle = _clean_text(f"本轮参与看板：产出、累计与输出日志一屏可见。- [{generated.replace('T', ' ')}]")
     x = MARGIN + 28
     draw.text((x, y + 22), _fit_text(draw, group, fonts["small_bold"], 460), font=fonts["small_bold"], fill=(226, 255, 251))
     hero_font = _fit_font(title, fonts["hero"], fonts["hero_small"], draw, 1010)
